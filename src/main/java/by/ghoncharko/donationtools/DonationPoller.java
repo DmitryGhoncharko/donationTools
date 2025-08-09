@@ -1,4 +1,3 @@
-// by/ghoncharko/donationtools/DonationPoller.java
 package by.ghoncharko.donationtools;
 
 import org.slf4j.Logger;
@@ -39,7 +38,7 @@ public class DonationPoller {
         this.scheduler = scheduler;
     }
 
-    /** запустить с текущим pollIntervalMs */
+
     public synchronized void start() {
         if (running.get()) return;
         long delay = Math.max(500, props.getPollIntervalMs());
@@ -48,7 +47,7 @@ public class DonationPoller {
         log.info("DonationPoller запущен, интервал {} ms", delay);
     }
 
-    /** остановить */
+
     public synchronized void stop() {
         if (future != null) {
             future.cancel(false);
@@ -58,7 +57,7 @@ public class DonationPoller {
         log.info("DonationPoller остановлен");
     }
 
-    /** перезапустить при смене интервала */
+
     public synchronized void restartIfRunning() {
         if (running.get()) {
             stop();

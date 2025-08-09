@@ -14,14 +14,13 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class TokenStore {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    // начальное значение забираем из spring.properties (если задано)
+
     private volatile String token;
 
-    // файл для кросс-запуска: ~/.donationtools.properties
+
     private final Path storePath = Path.of(System.getProperty("user.home"), ".donationtools.properties");
 
     public TokenStore(@Value("${donationalerts.token:}") String initial) {
-        // порядок: сначала пытаемся загрузить из файла, если нет — берем из проперти
         String fromFile = loadFromFile();
         this.token = (fromFile != null && !fromFile.isBlank()) ? fromFile : initial;
     }

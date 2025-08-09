@@ -1,4 +1,3 @@
-// by/ghoncharko/donationtools/DonationToolsUI.java
 package by.ghoncharko.donationtools;
 
 import org.springframework.context.event.EventListener;
@@ -26,7 +25,7 @@ public class DonationToolsUI {
     private JTable rulesTable;
     private RulesTableModel rulesModel;
 
-    // extra options
+
     private JSpinner defaultBrightnessSpinner;
     private JCheckBox useNircmdCheck;
     private JTextField nircmdPathField;
@@ -53,7 +52,7 @@ public class DonationToolsUI {
         root.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
         frame.setContentPane(root);
 
-        // top controls
+
         var top = new JPanel(new FlowLayout(FlowLayout.LEFT));
         top.add(new JLabel("Mode:"));
         modeCombo = new JComboBox<>(DonationActionsProperties.Mode.values());
@@ -81,21 +80,21 @@ public class DonationToolsUI {
 
         root.add(top, BorderLayout.NORTH);
 
-        // center: tabs
+
         var tabs = new JTabbedPane();
 
-        // TAB 1: RANDOM
+
         tabs.add("Random Enabled", buildRandomPanel());
 
-        // TAB 2: RULES
+
         tabs.add("Rules", buildRulesPanel());
 
-        // TAB 3: Extra (яркость / NirCmd)
+
         tabs.add("Extra", buildExtraPanel());
 
         root.add(tabs, BorderLayout.CENTER);
 
-        // bottom: Save / Apply
+
         var bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnApply = new JButton("Apply");
         btnApply.addActionListener(e -> applyToProps());
@@ -181,21 +180,21 @@ public class DonationToolsUI {
         return panel;
     }
 
-    /** Считать значения с экрана и применить к props */
+
     private void applyToProps() {
-        // mode
+
         props.setMode((DonationActionsProperties.Mode) modeCombo.getSelectedItem());
 
-        // poll interval
+
         long interval = ((Number) pollSpinner.getValue()).longValue();
         props.setPollIntervalMs(interval);
 
-        // enabled
+
         List<ActionType> enabled = new ArrayList<>();
         enabledChecks.forEach((a, cb) -> { if (cb.isSelected()) enabled.add(a); });
         props.setEnabled(enabled);
 
-        // rules
+
         props.setRules(rulesModel.getRules());
 
         String newToken = tokenField.getText();

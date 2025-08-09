@@ -1,4 +1,3 @@
-// by/ghoncharko/donationtools/DonationAlertsClient.java
 package by.ghoncharko.donationtools;
 
 import org.slf4j.Logger;

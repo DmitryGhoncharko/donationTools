@@ -1,4 +1,3 @@
-// by/ghoncharko/donationtools/RulesTableModel.java
 package by.ghoncharko.donationtools;
 
 import javax.swing.table.AbstractTableModel;
