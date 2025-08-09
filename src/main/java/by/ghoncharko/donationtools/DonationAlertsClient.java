@@ -1,9 +1,12 @@
+// by/ghoncharko/donationtools/DonationAlertsClient.java
 package by.ghoncharko.donationtools;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
@@ -16,18 +19,39 @@ public class DonationAlertsClient {
     private static final Logger log = LoggerFactory.getLogger(DonationAlertsClient.class);
 
     private final WebClient web;
+    private final TokenStore tokenStore;
     private final AtomicLong lastSeenId = new AtomicLong(0);
 
     public record Donation(long id, double amount, String currency, String message) {}
     public record DonationsResp(List<Donation> data) {}
 
-    public DonationAlertsClient(
-            @Value("${donationalerts.token}") String token
-    ) {
+    public DonationAlertsClient(TokenStore tokenStore) {
+        this.tokenStore = tokenStore;
         this.web = WebClient.builder()
                 .baseUrl("https://www.donationalerts.com/api/v1/alerts")
-                .defaultHeader("Authorization", "Bearer " + token)
+                // динамически подставляем текущий токен на каждый запрос
+                .filter(authorizationFilter())
                 .build();
+    }
+
+    private ExchangeFilterFunction authorizationFilter() {
+        return (request, next) -> {
+            String token = tokenStore.getToken();
+
+            ClientRequest newRequest = ClientRequest.from(request)
+                    .headers(h -> {
+
+                        if (token == null || token.isBlank()) {
+                            h.remove(HttpHeaders.AUTHORIZATION);
+                        } else {
+
+                            h.setBearerAuth(token);
+                        }
+                    })
+                    .build();
+
+            return next.exchange(newRequest);
+        };
     }
 
     public Mono<List<Donation>> fetchNew() {

@@ -17,6 +17,7 @@ public class DonationToolsUI {
 
     private final DonationActionsProperties props;
     private final DonationPoller poller;
+    private JTextField tokenField;
 
     private JFrame frame;
     private JComboBox<DonationActionsProperties.Mode> modeCombo;
@@ -29,10 +30,12 @@ public class DonationToolsUI {
     private JSpinner defaultBrightnessSpinner;
     private JCheckBox useNircmdCheck;
     private JTextField nircmdPathField;
+    private final TokenStore tokenStore;
 
-    public DonationToolsUI(DonationActionsProperties props, DonationPoller poller) {
+    public DonationToolsUI(DonationActionsProperties props, DonationPoller poller,TokenStore tokenStore) {
         this.props = props;
         this.poller = poller;
+        this.tokenStore = tokenStore;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -150,6 +153,12 @@ public class DonationToolsUI {
 
         int r = 0;
 
+        gc.gridx=0; gc.gridy=r; panel.add(new JLabel("DonationAlerts token:"), gc);
+        tokenField = new JTextField(30);
+        tokenField.setText(tokenStore.getToken());
+        gc.gridx=1; panel.add(tokenField, gc);
+        r++;
+
         gc.gridx=0; gc.gridy=r; panel.add(new JLabel("Default brightness (0..1):"), gc);
         defaultBrightnessSpinner = new JSpinner(new SpinnerNumberModel(1.0, 0.0, 1.0, 0.05));
         gc.gridx=1; panel.add(defaultBrightnessSpinner, gc);
@@ -189,7 +198,18 @@ public class DonationToolsUI {
         // rules
         props.setRules(rulesModel.getRules());
 
-        // перезапустить таймер, если интервал изменился
+        String newToken = tokenField.getText();
+        tokenStore.setToken(newToken);
+        try {
+            tokenStore.save();
+        } catch (RuntimeException ex) {
+            JOptionPane.showMessageDialog(frame,
+                    "Не удалось сохранить токен: " + ex.getMessage(),
+                    "Ошибка сохранения", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+
         poller.restartIfRunning();
 
         JOptionPane.showMessageDialog(frame, "Настройки применены.", "OK", JOptionPane.INFORMATION_MESSAGE);
