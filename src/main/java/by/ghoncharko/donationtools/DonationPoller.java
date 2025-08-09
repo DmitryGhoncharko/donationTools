@@ -1,19 +1,21 @@
+// by/ghoncharko/donationtools/DonationPoller.java
 package by.ghoncharko.donationtools;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.scheduling.TaskScheduler;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
-import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.Random;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
-@EnableScheduling
 public class DonationPoller {
 
     private static final Logger log = LoggerFactory.getLogger(DonationPoller.class);
@@ -21,25 +23,66 @@ public class DonationPoller {
     private final DonationAlertsClient da;
     private final ActionExecutor executor;
     private final DonationActionsProperties props;
-    private final SecureRandom random = new SecureRandom();
+    private final TaskScheduler scheduler;
+
+    private final AtomicBoolean running = new AtomicBoolean(false);
+    private volatile ScheduledFuture<?> future;
+    private final Random random = new Random();
 
     public DonationPoller(DonationAlertsClient da,
                           ActionExecutor executor,
-                          DonationActionsProperties props) {
+                          DonationActionsProperties props,
+                          TaskScheduler scheduler) {
         this.da = da;
         this.executor = executor;
         this.props = props;
+        this.scheduler = scheduler;
     }
 
+    /** запустить с текущим pollIntervalMs */
+    public synchronized void start() {
+        if (running.get()) return;
+        long delay = Math.max(500, props.getPollIntervalMs());
+        future = scheduler.scheduleAtFixedRate(this::safeTick, Duration.ofMillis(delay));
+        running.set(true);
+        log.info("DonationPoller запущен, интервал {} ms", delay);
+    }
 
-    @Scheduled(fixedDelayString = "${donations.pollIntervalMs:4000}")
-    public void tick() {
+    /** остановить */
+    public synchronized void stop() {
+        if (future != null) {
+            future.cancel(false);
+            future = null;
+        }
+        running.set(false);
+        log.info("DonationPoller остановлен");
+    }
+
+    /** перезапустить при смене интервала */
+    public synchronized void restartIfRunning() {
+        if (running.get()) {
+            stop();
+            start();
+        }
+    }
+
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    private void safeTick() {
+        try {
+            tick();
+        } catch (Throwable t) {
+            log.error("Ошибка в tick(): {}", t.toString(), t);
+        }
+    }
+
+    private void tick() {
         da.fetchNew()
                 .flatMapMany(reactor.core.publisher.Flux::fromIterable)
                 .concatMap(d -> Mono.fromRunnable(() -> handleDonation(d)))
-                .onErrorContinue((e, o) -> {
-                    log.error("Ошибка при обработке доната {}: {}", o, e.toString(), e);
-                })
+                .onErrorContinue((e, o) -> log.error("Ошибка при обработке доната {}: {}", o, e.toString(), e))
                 .blockLast();
     }
 
