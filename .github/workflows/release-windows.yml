@@ -11,34 +11,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 17 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
+          cache: 'gradle'
 
       - name: Build JAR
-        run: ./gradlew clean bootJar
+        run: ./gradlew clean bootJar --no-daemon
 
       - name: jpackage (app-image)
         shell: pwsh
         run: |
           $j = Get-ChildItem build\libs\donationTools-*.jar | Select-Object -First 1
+          $ver = if ($env:GITHUB_REF_NAME -and $env:GITHUB_REF_NAME.StartsWith('v')) { $env:GITHUB_REF_NAME.Substring(1) } else { "1.0.0" }
           jpackage `
             --name DonationTools `
             --input build\libs `
             --main-jar $j.Name `
             --type app-image `
-            --app-version $env:GITHUB_REF_NAME.Replace('v','') `
+            --app-version $ver `
             --java-options "-Djava.awt.headless=false --spring.config.additional-location=./cfg/"
-          # создаём cfg для конфигов
           New-Item -ItemType Directory -Force -Path "DonationTools\cfg" | Out-Null
-          # если у тебя есть заранее application.properties — скопируем
           if (Test-Path config) { Copy-Item -Recurse -Force config\* "DonationTools\cfg" }
 
       - name: Zip artifact
-        run: |
-          Compress-Archive -Path DonationTools -DestinationPath DonationTools-Windows.zip -Force
+        run: Compress-Archive -Path DonationTools -DestinationPath DonationTools-Windows.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
