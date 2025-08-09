@@ -1,95 +1,78 @@
 package by.ghoncharko.donationtools;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.math.BigDecimal;
+import java.security.SecureRandom;
+import java.util.List;
+import java.util.Objects;
 
 @Component
 @EnableScheduling
 public class DonationPoller {
 
-    private final DonationAlertsClient da;
-    private final ActionService act;
-    private final Map<String, String> triggers;
-    private final NavigableMap<Integer, List<String>> thresholds;
-    private final String customKeys;
-    private final int customKeysRepeat;
+    private static final Logger log = LoggerFactory.getLogger(DonationPoller.class);
 
-    public DonationPoller(
-            DonationAlertsClient da,
-            ActionService act,
-            @Value("${actions.triggers}") String triggersStr,
-            @Value("${actions.thresholds}") String thresholdsStr,
-            @Value("${actions.customKeys}") String customKeys,
-            @Value("${actions.customKeysRepeat}") int customKeysRepeat
-    ) {
+    private final DonationAlertsClient da;
+    private final ActionExecutor executor;
+    private final DonationActionsProperties props;
+    private final SecureRandom random = new SecureRandom();
+
+    public DonationPoller(DonationAlertsClient da,
+                          ActionExecutor executor,
+                          DonationActionsProperties props) {
         this.da = da;
-        this.act = act;
-        this.triggers = parseMap(triggersStr);
-        this.thresholds = parseThresholds(thresholdsStr);
-        this.customKeys = customKeys;
-        this.customKeysRepeat = customKeysRepeat;
+        this.executor = executor;
+        this.props = props;
     }
 
-    @Scheduled(fixedDelayString = "${donationalerts.pollIntervalMs}")
+
+    @Scheduled(fixedDelayString = "${donations.pollIntervalMs:4000}")
     public void tick() {
-        da.fetchNew().flatMapMany(list -> reactor.core.publisher.Flux.fromIterable(list))
-                .concatMap(d -> Mono.fromRunnable(() -> handleDonation(d.amount(), d.message())))
-                .onErrorContinue((e, o) -> e.printStackTrace())
+        da.fetchNew()
+                .flatMapMany(reactor.core.publisher.Flux::fromIterable)
+                .concatMap(d -> Mono.fromRunnable(() -> handleDonation(d)))
+                .onErrorContinue((e, o) -> {
+                    log.error("Ошибка при обработке доната {}: {}", o, e.toString(), e);
+                })
                 .blockLast();
     }
 
-    private void handleDonation(double amount, String message) {
-        String msg = Optional.ofNullable(message).orElse("").toLowerCase();
+    private void handleDonation(DonationAlertsClient.Donation donation) {
+        log.info("Новый донат: id={}, сумма={} {}, сообщение='{}'",
+                donation.id(), donation.amount(), donation.currency(), donation.message());
 
-        for (var entry : triggers.entrySet()) {
-            if (msg.contains(entry.getKey().toLowerCase())) {
-                runAction(entry.getValue());
-                return;
-            }
+        List<ActionType> pool = switch (props.getMode()) {
+            case RANDOM -> props.getEnabled();
+            case RULES -> actionsByRules(new BigDecimal(String.valueOf(donation.amount())));
+        };
+
+        if (pool == null || pool.isEmpty()) {
+            log.info("Подходящих действий не найдено (mode={}, amount={})", props.getMode(), donation.amount());
+            return;
         }
 
-        for (var entry : thresholds.descendingMap().entrySet()) {
-            if (amount >= entry.getKey()) {
-                entry.getValue().forEach(this::runAction);
-                return;
-            }
-        }
+        ActionType chosen = pool.get(random.nextInt(pool.size()));
+        executor.run(chosen);
     }
 
-    private void runAction(String actionName) {
-        switch (actionName) {
-            case "randomMouse" -> act.randomMouseMoveAndClicks(6, 2);
-            case "pressG3" -> act.pressKeys("g", 3, 150);
-            case "pressWASD" -> act.pressKeys("wasd", 1, 120);
-            case "dark2s" -> act.setBrightnessTemporary(0.0, 2000);
-            case "dark3s" -> act.setBrightnessTemporary(0.0, 3000);
-            case "customKeys" -> act.pressKeys(customKeys, customKeysRepeat, 150);
-        }
+    private List<ActionType> actionsByRules(BigDecimal amount) {
+        if (props.getRules() == null) return List.of();
+        return props.getRules().stream()
+                .filter(r -> inRange(amount, r.getMin(), r.getMax()))
+                .findFirst()
+                .map(DonationActionsProperties.Rule::getActions)
+                .orElse(List.of());
     }
 
-    private Map<String, String> parseMap(String str) {
-        return Arrays.stream(str.split(";"))
-                .map(s -> s.split(":"))
-                .filter(a -> a.length == 2)
-                .collect(Collectors.toMap(a -> a[0], a -> a[1]));
-    }
-
-    private NavigableMap<Integer, List<String>> parseThresholds(String str) {
-        NavigableMap<Integer, List<String>> map = new TreeMap<>();
-        for (String part : str.split(";")) {
-            String[] arr = part.split(":");
-            if (arr.length == 2) {
-                int amount = Integer.parseInt(arr[0]);
-                List<String> acts = Arrays.asList(arr[1].split(","));
-                map.put(amount, acts);
-            }
-        }
-        return map;
+    private boolean inRange(BigDecimal value, BigDecimal min, BigDecimal max) {
+        boolean geMin = (min == null) || (value.compareTo(min) >= 0);
+        boolean leMax = (max == null) || (value.compareTo(max) <= 0);
+        return geMin && leMax;
     }
 }
