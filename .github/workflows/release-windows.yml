@@ -32,8 +32,11 @@ jobs:
             --main-jar $j.Name `
             --type app-image `
             --app-version $ver `
-            --java-options "-Djava.awt.headless=false --spring.config.additional-location=./cfg/"
+            --win-console `
+            --java-options "-Djava.awt.headless=false" `
+            --java-options "-Dspring.config.additional-location=cfg/"
           New-Item -ItemType Directory -Force -Path "DonationTools\cfg" | Out-Null
+          # Скопируем шаблонные конфиги, если есть в репо
           if (Test-Path config) { Copy-Item -Recurse -Force config\* "DonationTools\cfg" }
 
       - name: Zip artifact
